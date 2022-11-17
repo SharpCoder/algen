@@ -1,17 +1,17 @@
-use std::fmt::Display;
-
-use models::{algorithm::*, analyzer::Analyzer, node::Node, test_parameters::TestParameters};
+use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
 
 use crate::util::tournament_selection;
 
 pub mod models;
 mod util;
 
-pub fn run_genetic_test<InputData, OutputData: Clone + Display, Solution: Clone>(
+pub fn run_genetic_test<InputData, OutputData: Clone, Solution: Clone>(
     params: &TestParameters,
     input_data: InputData,
     algo: impl Algorithm<InputData, OutputData, Solution>,
     analyzer: impl Analyzer<InputData, OutputData>,
+
+    on_generation_complete: Option<fn(OutputData)>,
 ) {
     // Generate the initial population
     let mut population = Vec::new();
@@ -76,12 +76,15 @@ pub fn run_genetic_test<InputData, OutputData: Clone + Display, Solution: Clone>
         }
         next_population.clear();
 
-        // Output some debug information
-        match best_output {
-            None => (),
-            Some(output) => {
-                println!("[generation {generation}] best score -> {best_score} {output}");
-            }
+        // Invoke the callback if present
+        match on_generation_complete {
+            None => {}
+            Some(func) => match best_output {
+                None => {}
+                Some(output) => {
+                    func(output);
+                }
+            },
         }
     }
 }
