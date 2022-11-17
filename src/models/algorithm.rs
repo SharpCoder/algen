@@ -4,13 +4,13 @@ use super::{node::Node, test_parameters::TestParameters};
 /// to solve. It has methods for generating a random solution and evaluating
 /// the solution in order to produce an output. Furthermore, it should know
 /// how to recombine two solutions to produce the next generation.
-pub trait Algorithm<InputData, Solution: Clone> {
-    fn output<ComputedOutput>(
+pub trait Algorithm<InputData, OutputData, Solution: Clone> {
+    fn output(
         &self,
-        node: Node<Solution>,
-        input: InputData,
+        node: &mut Node<Solution>,
+        input: &InputData,
         params: &TestParameters,
-    ) -> ComputedOutput;
+    ) -> OutputData;
 
     fn allocate_node(&self, params: &TestParameters) -> Node<Solution>;
 
