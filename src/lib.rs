@@ -1,12 +1,23 @@
+//! Algen is a genetic algorithm runner. It provides a common set of traits
+//! and models that can be implemented to construct a genetic algorithm.
+//! Once these traits and models have been filled out, you can invoke the
+//! `run_algorithm` method in this crate which will do the following:
+//!
+//! - Create an initial population
+//! - Score each node
+//! - Reserve the best and worst solutions
+//! - Create the next generation through recombination and tournament selection
+//! - Begin the cycle again
+//!
+//! This will happen until a winning condition is met, or until you have
+//! exhausted all generations.
+
+mod math;
 pub mod models;
-mod util;
 
-use std::{
-    borrow::BorrowMut,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{models::node::Node, util::tournament_selection};
+use crate::{math::tournament_selection, models::node::Node};
 use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
 use rayon::prelude::*;
 
@@ -17,7 +28,19 @@ fn time() -> u128 {
         .as_millis();
 }
 
-pub fn run_genetic_test<
+/// The primary algorithm runner. This method will accept the types:
+/// - InputData: The shape of data which is passed to each solution.
+/// - OutputData: The shape of data which a solution will output
+/// - Solution: The chromosome which represents a solution
+///
+/// Additionally, it takes the following parameters:
+/// - params: Test parameters that define the rules of the runner
+/// - input_data: The actual data to pass to each solution
+/// - algo: A struct which implements the Algorithm trait
+/// - analyzer: A struct which implements the Analyzer trait
+/// - on_generation_complete: A method which is run at the end of each
+/// generation and, if it returns true, the test will be stopped.
+pub fn run_algorithm<
     InputData: Send + Sync,
     OutputData: Clone + Send + Sync,
     Solution: Clone + Send + Sync,
@@ -27,7 +50,7 @@ pub fn run_genetic_test<
     algo: impl Algorithm<InputData, OutputData, Solution> + Sync,
     analyzer: impl Analyzer<InputData, OutputData> + Sync,
 
-    on_generation_complete: Option<fn(OutputData)>,
+    on_generation_complete: Option<fn(OutputData) -> bool>,
 ) {
     // Generate the initial population
     let mut population = Vec::new();
@@ -102,20 +125,22 @@ pub fn run_genetic_test<
         }
         next_population.clear();
 
+        let end_time = time();
+        let elapsed = end_time - start_time;
+        println!("[{generation}] {elapsed}ms");
+
         // Invoke the callback if present
         match on_generation_complete {
             None => {}
             Some(func) => match best_output {
                 None => {}
                 Some(output) => {
-                    func(output);
+                    if func(output) {
+                        return;
+                    }
                 }
             },
         }
-
-        let end_time = time();
-        let elapsed = end_time - start_time;
-        println!("[{generation}] {elapsed}ms");
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::models::{node::Node, test_parameters::TestParameters};
 use rand::prelude::*;
 
+/// A basic implementation of tournament selection.
 pub fn tournament_selection<Solution: Clone>(
     nodes: &[Node<Solution>],
     params: &TestParameters,

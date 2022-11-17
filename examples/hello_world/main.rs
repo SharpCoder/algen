@@ -4,7 +4,7 @@ use algen::{
     models::{
         algorithm::Algorithm, analyzer::Analyzer, node::Node, test_parameters::TestParameters,
     },
-    run_genetic_test,
+    run_algorithm,
 };
 use rand::prelude::*;
 
@@ -44,7 +44,7 @@ impl Algorithm<InputType, OutputType, StringSolution> for StringAlgorithm {
         let mut rng = rand::thread_rng();
         let mut next_solution: InputType = [0; 13];
 
-        for i in 0..12 {
+        for i in 0..13 {
             if rng.gen_bool(1.0 / 2.0) {
                 next_solution[i] = left.solution.shifts[i];
             } else {
@@ -71,8 +71,8 @@ impl Algorithm<InputType, OutputType, StringSolution> for StringAlgorithm {
         input: &InputType,
         params: &TestParameters,
     ) -> OutputType {
-        let mut output: [u8; 12] = [0; 12];
-        for i in 0..12 {
+        let mut output: [u8; 13] = [0; 13];
+        for i in 0..13 {
             let byte = input[i] + node.solution.shifts[i];
             if byte < 0 {
                 output[i] = (255 - byte) as u8;
@@ -94,7 +94,7 @@ impl Analyzer<InputType, OutputType> for StringAnalyzer {
         let template = b"Hello, world!";
         let output_bytes = output.as_bytes();
 
-        for i in 0..12 {
+        for i in 0..13 {
             if template[i] == output_bytes[i] {
                 score += 1.0 / 12.0;
             }
@@ -108,18 +108,18 @@ fn main() {
     let test_data: [Unit; 13] = [0; 13];
     let parameters: TestParameters = TestParameters {
         generations: 1000,
-        population: 50,
+        population: 50000,
         elitism_factor: 0.3,
         crossover_factor: 0.25,
         mutation_factor: 0.15,
-        tournament_size: 7,
-        purges: 4,
+        tournament_size: 6,
+        feature_flage: Vec::new(),
     };
 
     let algo = StringAlgorithm {};
     let analyzer = StringAnalyzer {};
 
-    run_genetic_test(
+    run_algorithm(
         &parameters,
         test_data,
         algo,
@@ -128,6 +128,12 @@ fn main() {
     );
 }
 
-fn after_generation(output: OutputType) {
+fn after_generation(output: OutputType) -> bool {
     println!("{output}");
+
+    if output.eq("Hello, world!") {
+        return true;
+    } else {
+        return false;
+    }
 }
