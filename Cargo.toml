@@ -8,7 +8,7 @@ license = "MIT"
 keywords = ["genetic-algorithm", "genetic", "algorithm", "ga"]
 categories = ["algorithms", "science", "simulation"]
 repository = "https://github.com/SharpCoder/algen"
-documentation = "https://docs.rs/crate/algen/latest"
+documentation = "https://docs.rs/algen/latest/algen/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
