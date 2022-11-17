@@ -1,12 +1,14 @@
 [package]
 name = "algen"
 description = "A parallelized genetic algorithm runner"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Josh Cole"]
 edition = "2021"
 license = "MIT"
 keywords = ["genetic-algorithm", "genetic", "algorithm", "ga"]
 categories = ["algorithms", "science", "simulation"]
+repository = "https://github.com/SharpCoder/algen"
+documentation = "https://docs.rs/crate/algen/latest"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
