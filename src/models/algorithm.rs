@@ -4,7 +4,8 @@ use super::{node::Node, test_parameters::TestParameters};
 /// to solve. It has methods for generating a random solution and evaluating
 /// the solution in order to produce an output. Furthermore, it should know
 /// how to recombine two solutions to produce the next generation.
-pub trait Algorithm<InputData, OutputData, Solution: Clone> {
+pub trait Algorithm<InputData: Send + Sync, OutputData: Send + Sync, Solution: Clone + Send + Sync>
+{
     fn output(
         &self,
         node: &mut Node<Solution>,

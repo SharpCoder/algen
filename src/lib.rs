@@ -1,15 +1,31 @@
-use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
-
-use crate::util::tournament_selection;
-
 pub mod models;
 mod util;
 
-pub fn run_genetic_test<InputData, OutputData: Clone, Solution: Clone>(
+use std::{
+    borrow::BorrowMut,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use crate::{models::node::Node, util::tournament_selection};
+use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
+use rayon::prelude::*;
+
+fn time() -> u128 {
+    return SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+}
+
+pub fn run_genetic_test<
+    InputData: Send + Sync,
+    OutputData: Clone + Send + Sync,
+    Solution: Clone + Send + Sync,
+>(
     params: &TestParameters,
     input_data: InputData,
-    algo: impl Algorithm<InputData, OutputData, Solution>,
-    analyzer: impl Analyzer<InputData, OutputData>,
+    algo: impl Algorithm<InputData, OutputData, Solution> + Sync,
+    analyzer: impl Analyzer<InputData, OutputData> + Sync,
 
     on_generation_complete: Option<fn(OutputData)>,
 ) {
@@ -23,25 +39,23 @@ pub fn run_genetic_test<InputData, OutputData: Clone, Solution: Clone>(
 
     // Iterate over each generation
     for generation in 0..params.generations {
+        let start_time = time();
         let mut best_score = 0.0;
         let mut best_output = None;
 
-        // Compute the score for each node
-        for idx in 0..population.len() {
-            let mut node = population.get_mut(idx);
-            match node {
-                Some(mutable_node) => {
-                    let output = algo.output(mutable_node, &input_data, params);
-                    mutable_node.score = analyzer.evaluate(&input_data, output.clone(), &params);
+        // Compute the score for each node, in parallel
+        population.par_iter_mut().for_each(|node| {
+            let output = algo.output(node, &input_data, params);
+            let score = analyzer.evaluate(&input_data, output.clone(), &params);
+            node.score = score;
+        });
 
-                    if mutable_node.score > best_score {
-                        best_score = mutable_node.score;
-                        best_output = Some(output.clone());
-                    }
-                }
-                None => (),
+        population.iter_mut().for_each(|node| {
+            if node.score > best_score {
+                best_score = node.score;
+                best_output = Some(algo.output(node, &input_data, params));
             }
-        }
+        });
 
         // Retain the best and worst
         population.sort_by(|node_left, node_right| {
@@ -60,13 +74,25 @@ pub fn run_genetic_test<InputData, OutputData: Clone, Solution: Clone>(
 
         // NOTE!!! Consult Kozac on this logic
         // Now we need to fill up the population remaining with a population selection
-        while next_population.len() != population.len() {
-            let left = tournament_selection(population.as_slice(), params);
-            let right = tournament_selection(population.as_slice(), params);
+        let children = population
+            .par_iter()
+            .map(|node| {
+                let left = tournament_selection(population.as_slice(), params);
+                let right = tournament_selection(population.as_slice(), params);
 
-            if left.is_some() && right.is_some() {
-                next_population.push(algo.combine_node(left.unwrap(), right.unwrap(), params));
-            }
+                if left.is_some() && right.is_some() {
+                    return Some(algo.combine_node(left.unwrap(), right.unwrap(), params));
+                } else {
+                    return None;
+                }
+            })
+            .take(population.len() - next_population.len())
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect::<Vec<Node<Solution>>>();
+
+        for child in children {
+            next_population.push(child);
         }
 
         // Now promote next_pop into real pop
@@ -86,6 +112,10 @@ pub fn run_genetic_test<InputData, OutputData: Clone, Solution: Clone>(
                 }
             },
         }
+
+        let end_time = time();
+        let elapsed = end_time - start_time;
+        println!("[{generation}] {elapsed}ms");
     }
 }
 

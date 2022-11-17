@@ -1,3 +1,5 @@
+use rayon::prelude::IntoParallelIterator;
+
 /// A node is a wrapper that contains one specific
 /// solution for an experiment that was created
 /// during a genetic run.
