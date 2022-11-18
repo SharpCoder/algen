@@ -99,7 +99,7 @@ pub fn run_algorithm<
         // Now we need to fill up the population remaining with a population selection
         let children = population
             .par_iter()
-            .map(|node| {
+            .map(|_| {
                 let left = tournament_selection(population.as_slice(), params);
                 let right = tournament_selection(population.as_slice(), params);
 

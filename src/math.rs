@@ -10,7 +10,7 @@ pub fn tournament_selection<Solution: Clone>(
     let mut best_node: Option<Node<Solution>> = None;
     let mut best_score = f32::MIN;
 
-    for i in 0..params.tournament_size {
+    for _ in 0..params.tournament_size {
         let idx = rng.gen_range(0..nodes.len());
         match nodes.get(idx) {
             Some(node) => {
