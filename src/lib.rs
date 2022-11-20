@@ -14,28 +14,15 @@
 
 mod math;
 pub mod models;
-mod telemetry;
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::{math::tournament_selection, models::node::Node};
-use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
-use rayon::prelude::*;
-use telemetry::IterationTelemetry;
-
-#[cfg(feature = "telemetry")]
-use opentelemetry::{
-    global,
-    trace::{Span, Tracer},
-    KeyValue,
+use crate::{
+    math::tournament_selection, models::algorithm::*, models::analyzer::Analyzer,
+    models::node::Node, models::test_parameters::TestParameters,
 };
+use rayon::prelude::*;
 
-fn time() -> u128 {
-    return SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-}
+#[cfg(feature = "tracing")]
+use tracing::{event, span, Level};
 
 /// The primary algorithm runner. This method will accept the types:
 /// - InputData: The shape of data which is passed to each solution.
@@ -62,7 +49,6 @@ pub fn run_algorithm<
     on_generation_complete: Option<fn(OutputData) -> bool>,
 ) {
     // Generate the initial population
-    let run_id = time();
     let mut population = Vec::new();
     let mut next_population = Vec::new();
 
@@ -72,18 +58,28 @@ pub fn run_algorithm<
 
     // Iterate over each generation
     for generation in 0..params.generations {
-        let generation_start = time();
+        #[cfg(feature = "tracing")]
+        let generation_span = span!(Level::TRACE, "generation", generation = generation);
+        #[cfg(feature = "tracing")]
+        let generation_span_entered = generation_span.enter();
+
         let mut best_score = 0.0;
         let mut best_output = None;
 
         // Compute the score for each node, in parallel
-        let compute_start = time();
+        #[cfg(feature = "tracing")]
+        let compute_span = span!(Level::TRACE, "compute");
+        #[cfg(feature = "tracing")]
+        let compute_span_entered = compute_span.enter();
+
         population.par_iter_mut().for_each(|node| {
             let output = algo.output(node, &input_data, params);
             let score = analyzer.evaluate(&input_data, output.clone(), &params);
             node.score = score;
         });
-        let compute_end = time();
+
+        #[cfg(feature = "tracing")]
+        drop(compute_span_entered);
 
         // Find the best solution
         population.iter_mut().for_each(|node| {
@@ -98,6 +94,11 @@ pub fn run_algorithm<
             node_right.score.partial_cmp(&node_left.score).unwrap()
         });
 
+        #[cfg(feature = "tracing")]
+        let next_generation_span = span!(Level::TRACE, "recombination");
+        #[cfg(feature = "tracing")]
+        let next_generation_span_entered = next_generation_span.enter();
+
         // Take the creme of the crop, in both directions. And we multiply by 0.5
         // because each iteration takes 2 nodes.
         for i in 0..(params.elitism_factor * 0.5 * population.len() as f32) as usize {
@@ -110,7 +111,6 @@ pub fn run_algorithm<
 
         // NOTE!!! Consult Kozac on this logic
         // Now we need to fill up the population remaining with a population selection
-        let combine_start = time();
         let children = population
             .par_iter()
             .map(|_| {
@@ -128,11 +128,12 @@ pub fn run_algorithm<
             .map(|x| x.unwrap())
             .collect::<Vec<Node<Solution>>>();
 
-        let combine_end = time();
-
         for child in children {
             next_population.push(child);
         }
+
+        #[cfg(feature = "tracing")]
+        drop(next_generation_span_entered);
 
         // Now promote next_pop into real pop
         population.clear();
@@ -140,19 +141,14 @@ pub fn run_algorithm<
             population.push(node.clone());
         }
         next_population.clear();
-        let generation_end = time();
 
-        // Log telemetry. NOTE: This is only used for real if the telemetry featuer is enabled.
-        log_telemetry(IterationTelemetry {
-            run_id: run_id,
-            generation: generation,
-            generation_size: population.len(),
-            total_compute_time_ms: (compute_end - compute_start),
-            total_recombination_time_ms: (combine_end - combine_start),
-            total_generation_time: (generation_end - generation_start),
-            best_score: best_score,
-            best_solution: best_output.clone(),
-        });
+        #[cfg(feature = "tracing")]
+        event!(
+            Level::INFO,
+            msg = "Generation finished processing",
+            generation = generation,
+            score = best_score
+        );
 
         // Invoke the callback if present
         match on_generation_complete {
@@ -161,43 +157,22 @@ pub fn run_algorithm<
                 None => {}
                 Some(output) => {
                     if func(output) {
+                        #[cfg(feature = "tracing")]
+                        event!(
+                            Level::INFO,
+                            msg = "Winning condition met",
+                            best_score = best_score
+                        );
                         return;
                     }
                 }
             },
         }
+
+        #[cfg(feature = "tracing")]
+        drop(generation_span_entered);
     }
 }
-
-#[cfg(feature = "telemetry")]
-fn log_telemetry<T>(telemetry: IterationTelemetry<T>) {
-    let tracer = global::tracer("algen");
-    let mut span = tracer.start("iteration");
-    span.add_event_with_timestamp("generation", SystemTime::now(), Vec::new());
-    span.set_attributes(vec![
-        KeyValue::new("run_id", format!("{}", telemetry.run_id)),
-        KeyValue::new("generation", telemetry.generation as i64),
-        KeyValue::new("generation_size", telemetry.generation_size as i64),
-        KeyValue::new(
-            "total_compute_time_ms",
-            telemetry.total_compute_time_ms as i64,
-        ),
-        KeyValue::new(
-            "total_recombination_time_ms",
-            telemetry.total_recombination_time_ms as i64,
-        ),
-        KeyValue::new(
-            "total_generation_time",
-            telemetry.total_generation_time as i64,
-        ),
-        KeyValue::new("best_score", telemetry.best_score as f64),
-    ]);
-
-    span.end();
-}
-
-#[cfg(not(feature = "telemetry"))]
-fn log_telemetry<T>(telemetry: IterationTelemetry<T>) {}
 
 #[cfg(test)]
 mod tests {
