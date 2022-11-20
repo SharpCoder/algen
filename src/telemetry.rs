@@ -1,5 +1,7 @@
 #[derive(Copy, Clone)]
 pub struct IterationTelemetry<OutputType> {
+    /// A unique id representing the overall tes.
+    pub run_id: u128,
     /// Which generation this blob refers to
     pub generation: usize,
     /// How many solutions exist in the population

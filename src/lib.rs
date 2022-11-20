@@ -23,6 +23,13 @@ use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
 use rayon::prelude::*;
 use telemetry::IterationTelemetry;
 
+#[cfg(feature = "telemetry")]
+use opentelemetry::{
+    global,
+    trace::{Span, Tracer},
+    KeyValue,
+};
+
 fn time() -> u128 {
     return SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -55,6 +62,7 @@ pub fn run_algorithm<
     on_generation_complete: Option<fn(OutputData) -> bool>,
 ) {
     // Generate the initial population
+    let run_id = time();
     let mut population = Vec::new();
     let mut next_population = Vec::new();
 
@@ -136,11 +144,12 @@ pub fn run_algorithm<
 
         // Log telemetry. NOTE: This is only used for real if the telemetry featuer is enabled.
         log_telemetry(IterationTelemetry {
+            run_id: run_id,
             generation: generation,
             generation_size: population.len(),
-            total_compute_time_ms: compute_end - compute_start,
-            total_recombination_time_ms: combine_end - combine_start,
-            total_generation_time: generation_end - generation_start,
+            total_compute_time_ms: (compute_end - compute_start),
+            total_recombination_time_ms: (combine_end - combine_start),
+            total_generation_time: (generation_end - generation_start),
             best_score: best_score,
             best_solution: best_output.clone(),
         });
@@ -160,6 +169,34 @@ pub fn run_algorithm<
     }
 }
 
+#[cfg(feature = "telemetry")]
+fn log_telemetry<T>(telemetry: IterationTelemetry<T>) {
+    let tracer = global::tracer("algen");
+    let mut span = tracer.start("iteration");
+    span.add_event_with_timestamp("generation", SystemTime::now(), Vec::new());
+    span.set_attributes(vec![
+        KeyValue::new("run_id", format!("{}", telemetry.run_id)),
+        KeyValue::new("generation", telemetry.generation as i64),
+        KeyValue::new("generation_size", telemetry.generation_size as i64),
+        KeyValue::new(
+            "total_compute_time_ms",
+            telemetry.total_compute_time_ms as i64,
+        ),
+        KeyValue::new(
+            "total_recombination_time_ms",
+            telemetry.total_recombination_time_ms as i64,
+        ),
+        KeyValue::new(
+            "total_generation_time",
+            telemetry.total_generation_time as i64,
+        ),
+        KeyValue::new("best_score", telemetry.best_score as f64),
+    ]);
+
+    span.end();
+}
+
+#[cfg(not(feature = "telemetry"))]
 fn log_telemetry<T>(telemetry: IterationTelemetry<T>) {}
 
 #[cfg(test)]

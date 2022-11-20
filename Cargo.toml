@@ -12,6 +12,10 @@ documentation = "https://docs.rs/algen/latest/algen/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+telemetry = ["dep:opentelemetry"]
+
 [dependencies]
 rand = "0.8.5"
 rayon = "1.5"
+opentelemetry = { version = "0.18.0", optional = true }
