@@ -14,12 +14,14 @@
 
 mod math;
 pub mod models;
+mod telemetry;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{math::tournament_selection, models::node::Node};
 use models::{algorithm::*, analyzer::Analyzer, test_parameters::TestParameters};
 use rayon::prelude::*;
+use telemetry::IterationTelemetry;
 
 fn time() -> u128 {
     return SystemTime::now()
@@ -62,17 +64,20 @@ pub fn run_algorithm<
 
     // Iterate over each generation
     for generation in 0..params.generations {
-        let start_time = time();
+        let generation_start = time();
         let mut best_score = 0.0;
         let mut best_output = None;
 
         // Compute the score for each node, in parallel
+        let compute_start = time();
         population.par_iter_mut().for_each(|node| {
             let output = algo.output(node, &input_data, params);
             let score = analyzer.evaluate(&input_data, output.clone(), &params);
             node.score = score;
         });
+        let compute_end = time();
 
+        // Find the best solution
         population.iter_mut().for_each(|node| {
             if node.score > best_score {
                 best_score = node.score;
@@ -97,6 +102,7 @@ pub fn run_algorithm<
 
         // NOTE!!! Consult Kozac on this logic
         // Now we need to fill up the population remaining with a population selection
+        let combine_start = time();
         let children = population
             .par_iter()
             .map(|_| {
@@ -114,6 +120,8 @@ pub fn run_algorithm<
             .map(|x| x.unwrap())
             .collect::<Vec<Node<Solution>>>();
 
+        let combine_end = time();
+
         for child in children {
             next_population.push(child);
         }
@@ -124,10 +132,18 @@ pub fn run_algorithm<
             population.push(node.clone());
         }
         next_population.clear();
+        let generation_end = time();
 
-        let end_time = time();
-        let elapsed = end_time - start_time;
-        println!("[{generation}] {elapsed}ms");
+        // Log telemetry. NOTE: This is only used for real if the telemetry featuer is enabled.
+        log_telemetry(IterationTelemetry {
+            generation: generation,
+            generation_size: population.len(),
+            total_compute_time_ms: compute_end - compute_start,
+            total_recombination_time_ms: combine_end - combine_start,
+            total_generation_time: generation_end - generation_start,
+            best_score: best_score,
+            best_solution: best_output.clone(),
+        });
 
         // Invoke the callback if present
         match on_generation_complete {
@@ -143,6 +159,8 @@ pub fn run_algorithm<
         }
     }
 }
+
+fn log_telemetry<T>(telemetry: IterationTelemetry<T>) {}
 
 #[cfg(test)]
 mod tests {
