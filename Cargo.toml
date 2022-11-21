@@ -1,7 +1,7 @@
 [package]
 name = "algen"
 description = "A parallelized genetic algorithm runner"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Josh Cole"]
 edition = "2021"
 license = "MIT"
