@@ -41,9 +41,9 @@ See the example in the examples folder for more details.
 ```rust
     run_algorithm(
         &parameters,
-        test_data,
-        algo,
-        analyzer,
+        &test_data,
+        &algo,
+        &analyzer,
         Some(after_generation),
     );
 ```
@@ -55,7 +55,7 @@ to emit traces using the [tracing](https://crates.io/crates/tracing) crate.
 
 ```toml
 [dependencies]
-algen = { version = "0.1.2", features = ["tracing"] }
+algen = { version = "0.2.0", features = ["tracing"] }
 ```
 
 ## Contributing
