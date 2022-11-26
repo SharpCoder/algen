@@ -11,6 +11,7 @@ use rand::prelude::*;
 type Unit = i16;
 type InputType = [Unit; 13];
 type OutputType = String;
+type FeatureFlags = Vec<&'static str>;
 
 #[derive(Clone)]
 struct Solution {
@@ -18,8 +19,12 @@ struct Solution {
 }
 
 struct GeneticAlgorithm {}
-impl Algorithm<InputType, OutputType, Solution> for GeneticAlgorithm {
-    fn allocate_node(&self, _params: &TestParameters) -> Node<Solution> {
+impl Algorithm<InputType, OutputType, Solution, FeatureFlags> for GeneticAlgorithm {
+    fn allocate_node(
+        &self,
+        _input: &InputType,
+        _params: &TestParameters<FeatureFlags>,
+    ) -> Node<Solution> {
         let mut rng = rand::thread_rng();
         let mut solution = Solution { shifts: [0; 13] };
 
@@ -38,7 +43,7 @@ impl Algorithm<InputType, OutputType, Solution> for GeneticAlgorithm {
         &self,
         left: Node<Solution>,
         right: Node<Solution>,
-        params: &TestParameters,
+        params: &TestParameters<FeatureFlags>,
     ) -> Node<Solution> {
         let mut rng = rand::thread_rng();
         let mut next_solution: InputType = [0; 13];
@@ -66,9 +71,9 @@ impl Algorithm<InputType, OutputType, Solution> for GeneticAlgorithm {
 
     fn output(
         &self,
-        node: &mut Node<Solution>,
+        node: &Node<Solution>,
         input: &InputType,
-        _params: &TestParameters,
+        _params: &TestParameters<FeatureFlags>,
     ) -> OutputType {
         let mut output: [u8; 13] = [0; 13];
         for i in 0..13 {
@@ -87,8 +92,8 @@ impl Algorithm<InputType, OutputType, Solution> for GeneticAlgorithm {
 }
 
 struct GeneticAnalyzer {}
-impl Analyzer<InputType, OutputType> for GeneticAnalyzer {
-    fn evaluate(&self, _input: &InputType, output: OutputType, _params: &TestParameters) -> f32 {
+impl Analyzer<InputType, OutputType, FeatureFlags> for GeneticAnalyzer {
+    fn evaluate(&self, output: &OutputType, _params: &TestParameters<FeatureFlags>) -> f32 {
         let mut score = 0.0;
         let template = b"Hello, world!";
         let output_bytes = output.as_bytes();
@@ -105,32 +110,44 @@ impl Analyzer<InputType, OutputType> for GeneticAnalyzer {
 
 fn main() {
     let test_data: [Unit; 13] = [0; 13];
-    let parameters: TestParameters = TestParameters {
+    let parameters: TestParameters<FeatureFlags> = TestParameters {
         generations: 1000,
         population: 5000,
         elitism_factor: 0.05,
         crossover_factor: 0.25,
         mutation_factor: 0.025,
         tournament_size: 10,
-        feature_flage: Vec::new(),
+        feature_flag: Vec::new(),
     };
 
     let algo = GeneticAlgorithm {};
     let analyzer = GeneticAnalyzer {};
 
-    run_algorithm(
+    let result = run_algorithm(
         &parameters,
-        test_data,
-        algo,
-        analyzer,
+        &test_data,
+        &algo,
+        &analyzer,
         Some(after_generation),
+    );
+
+    on_complete(
+        result.score,
+        &result.node.unwrap().solution,
+        &result.output.unwrap(),
     );
 }
 
-fn after_generation(output: OutputType) -> bool {
-    println!("{output}");
+fn on_complete(_score: f32, _solution: &Solution, output: &OutputType) {
+    let output_value = &output;
+    println!("winning output = {output_value}");
+}
 
-    if output.eq("Hello, world!") {
+fn after_generation(_score: f32, _solution: &Solution, output: &OutputType) -> bool {
+    let output_value = output;
+    println!("{output_value}");
+
+    if output_value.eq("Hello, world!") {
         return true;
     } else {
         return false;

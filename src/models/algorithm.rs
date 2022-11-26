@@ -4,7 +4,12 @@ use super::{node::Node, test_parameters::TestParameters};
 /// to solve. It has methods for generating a random solution and evaluating
 /// the solution in order to produce an output. Furthermore, it should know
 /// how to recombine two solutions to produce the next generation.
-pub trait Algorithm<InputData: Send + Sync, OutputData: Send + Sync, Solution: Clone + Send + Sync>
+pub trait Algorithm<
+    InputData: Send + Sync,
+    OutputData: Send + Sync,
+    Solution: Clone + Send + Sync,
+    FeatureFlags,
+>
 {
     /// A method which can take a test case and a Solution (effectively, the chromosome of the
     /// genetic algorithm) and return an output.
@@ -19,13 +24,17 @@ pub trait Algorithm<InputData: Send + Sync, OutputData: Send + Sync, Solution: C
     /// This will later be scored with the analyzer.
     fn output(
         &self,
-        node: &mut Node<Solution>,
+        node: &Node<Solution>,
         input: &InputData,
-        params: &TestParameters,
+        params: &TestParameters<FeatureFlags>,
     ) -> OutputData;
 
     /// This method should allocate a randomized Node<Solution>.
-    fn allocate_node(&self, params: &TestParameters) -> Node<Solution>;
+    fn allocate_node(
+        &self,
+        input: &InputData,
+        params: &TestParameters<FeatureFlags>,
+    ) -> Node<Solution>;
 
     /// Given two Node<Solution>, generate an offsprint using whatever
     /// genetic algorithm techniques you like. At a minimum, it should
@@ -37,6 +46,6 @@ pub trait Algorithm<InputData: Send + Sync, OutputData: Send + Sync, Solution: C
         &self,
         left: Node<Solution>,
         right: Node<Solution>,
-        params: &TestParameters,
+        params: &TestParameters<FeatureFlags>,
     ) -> Node<Solution>;
 }

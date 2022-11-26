@@ -40,6 +40,7 @@ use crate::{
     math::tournament_selection, models::algorithm::*, models::analyzer::Analyzer,
     models::node::Node, models::test_parameters::TestParameters,
 };
+use models::algen_result::AlgenResult;
 use rayon::prelude::*;
 
 #[cfg(feature = "tracing")]
@@ -49,6 +50,8 @@ use tracing::{event, span, Level};
 /// - InputData: The shape of data which is passed to each solution.
 /// - OutputData: The shape of data which a solution will output
 /// - Solution: The chromosome which represents a solution
+/// - FeatureFlags: An additinoal object to add functionality to the
+/// TestParameters structure.
 ///
 /// Additionally, it takes the following parameters:
 /// - params: Test parameters that define the rules of the runner
@@ -61,20 +64,25 @@ pub fn run_algorithm<
     InputData: Send + Sync,
     OutputData: Clone + Send + Sync,
     Solution: Clone + Send + Sync,
+    FeatureFlags: Send + Sync,
 >(
-    params: &TestParameters,
-    input_data: InputData,
-    algo: impl Algorithm<InputData, OutputData, Solution> + Sync,
-    analyzer: impl Analyzer<InputData, OutputData> + Sync,
+    params: &TestParameters<FeatureFlags>,
+    input_data: &InputData,
+    algo: &(impl Algorithm<InputData, OutputData, Solution, FeatureFlags> + Sync),
+    analyzer: &(impl Analyzer<InputData, OutputData, FeatureFlags> + Sync),
 
-    on_generation_complete: Option<fn(OutputData) -> bool>,
-) {
+    on_generation_complete: Option<fn(f32, &Solution, &OutputData) -> bool>,
+) -> AlgenResult<OutputData, Solution> {
     // Generate the initial population
     let mut population = Vec::new();
     let mut next_population = Vec::new();
+    let mut best_score = 0.0;
+    let mut best_node: Option<Node<Solution>> = None;
+    let mut best_solution: Option<Solution> = None;
+    let mut best_output = None;
 
     for _ in 0..params.population {
-        population.push(algo.allocate_node(&params));
+        population.push(algo.allocate_node(&input_data, &params));
     }
 
     // Iterate over each generation
@@ -84,31 +92,35 @@ pub fn run_algorithm<
         #[cfg(feature = "tracing")]
         let generation_span_entered = generation_span.enter();
 
-        let mut best_score = 0.0;
-        let mut best_output = None;
-
         // Compute the score for each node, in parallel
         #[cfg(feature = "tracing")]
         let compute_span = span!(Level::TRACE, "compute");
         #[cfg(feature = "tracing")]
         let compute_span_entered = compute_span.enter();
 
-        population.par_iter_mut().for_each(|node| {
-            let output = algo.output(node, &input_data, params);
-            let score = analyzer.evaluate(&input_data, output.clone(), &params);
-            node.score = score;
-        });
+        let mut winning_condition_found = false;
+
+        let computation_results = population
+            .par_iter_mut()
+            .map(|node| {
+                // Score each test case
+                let outputs = algo.output(node, &input_data, &params);
+                node.score = analyzer.evaluate(&outputs, params);
+                return (node.score, node.solution.clone(), outputs.clone(), node);
+            })
+            .collect::<Vec<(f32, Solution, OutputData, &mut Node<Solution>)>>();
+
+        for (score, solution, computation, node) in computation_results {
+            if score > best_score {
+                best_score = score;
+                best_node = Some(node.clone());
+                best_solution = Some(solution.clone());
+                best_output = Some(computation.clone());
+            }
+        }
 
         #[cfg(feature = "tracing")]
         drop(compute_span_entered);
-
-        // Find the best solution
-        population.iter_mut().for_each(|node| {
-            if node.score > best_score {
-                best_score = node.score;
-                best_output = Some(algo.output(node, &input_data, params));
-            }
-        });
 
         // Retain the best and worst
         population.sort_by(|node_left, node_right| {
@@ -174,25 +186,39 @@ pub fn run_algorithm<
         // Invoke the callback if present
         match on_generation_complete {
             None => {}
-            Some(func) => match best_output {
+            Some(func) => match &best_output {
                 None => {}
-                Some(output) => {
-                    if func(output) {
-                        #[cfg(feature = "tracing")]
-                        event!(
-                            Level::INFO,
-                            msg = "Winning condition met",
-                            best_score = best_score
-                        );
-                        return;
+                Some(output) => match &best_solution {
+                    None => {}
+                    Some(solution) => {
+                        if func(best_score, &solution, &output) {
+                            #[cfg(feature = "tracing")]
+                            event!(
+                                Level::INFO,
+                                msg = "Winning condition met",
+                                best_score = best_score
+                            );
+
+                            winning_condition_found = true;
+                        }
                     }
-                }
+                },
             },
         }
 
         #[cfg(feature = "tracing")]
         drop(generation_span_entered);
+
+        if winning_condition_found {
+            break;
+        }
     }
+
+    return AlgenResult {
+        score: best_score,
+        output: best_output,
+        node: best_node,
+    };
 }
 
 #[cfg(test)]

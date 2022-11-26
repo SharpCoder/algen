@@ -1,6 +1,6 @@
 /// This is a set of common genetic algorithm parameters that
 /// are often used for testing purposes.
-pub struct TestParameters {
+pub struct TestParameters<FeatureFlags> {
     /// The total amount of generations to produce in the test
     pub generations: usize,
     /// How many solutions will be created per generation
@@ -18,5 +18,5 @@ pub struct TestParameters {
     /// event, per tournament.
     pub tournament_size: usize,
     /// A bucket of strings that you can use however you like.
-    pub feature_flage: Vec<String>,
+    pub feature_flag: FeatureFlags,
 }
